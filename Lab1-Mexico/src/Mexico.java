@@ -43,20 +43,16 @@ public class Mexico {
 			if ("r".equals(cmd)) {
 				// --- Process ------
 				// leader may roll up to maxRolls (3) times
-				if (current == leader && leader.nRolls < maxRolls) {
-					leader.rollDice();
-				}
 				// subsequent players may only roll as often as the leader did
-				else if (current == leader || current.nRolls >= leader.nRolls) {
-					// choosing to let the player pass themselves, as passing automatically creates various
-					// ugly behaviours...
-					out.println("Max rolls reached! Pass to the next player by entering n!");
+				if (current == leader && leader.nRolls < maxRolls || current.nRolls < leader.nRolls) {
+					current.rollDice();
+					roundMsg(current);
 				}
 				else {
-					current.rollDice();
+					out.println("Max rolls reached!");
+					current = next(current, players);
 				}
 				// ---- Out --------
-				roundMsg(current);
 
 			} else if ("n".equals(cmd)) {
 				// Process
@@ -68,7 +64,7 @@ public class Mexico {
 				out.println("Enter r to roll or n to pass.");
 			}
 
-			if (allRolled(players) && "n".equals(cmd)) {
+			if (allRolled(players) && current == leader) {
 				// --- Process -----
 				Player loser = getLoser(players);
 				loser.amount -= 1;
@@ -207,6 +203,8 @@ public class Mexico {
 
 		void unroll() {
 			nRolls = 0;
+			fstDice = 0;
+			secDice = 0;
 		}
 
 		// rolling two 6-sided dice
