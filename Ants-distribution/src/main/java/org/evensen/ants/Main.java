@@ -43,6 +43,7 @@ public class Main extends Application {
     //
     private static final float PENCIL_RADIUS = ((WORLD_WIDTH * 0.02f) + (WORLD_HEIGHT * 0.02f)) / 4.0f;
 
+
     private final AntColony colony;
     private final boolean drawAnts;
     private final ObstacleRenderer obstacleRenderer;
@@ -56,10 +57,9 @@ public class Main extends Application {
     private Collection<AntHazard> hazards;
 
     public Main() {
-        int simpleWorld = 0;
-        // Create a new world with size WORLD_WIDTH * WORLD_HEIGHT och 4 food sources.
-        // todo: THIS CONSTRUCTOR CALL WAS TO MYANTWORLD2 <- WRONG NAME?
-        this.world = new MyAntWorld(WORLD_WIDTH, WORLD_HEIGHT, 4);
+
+        // Create a new world with size WORLD_WIDTH * WORLD_HEIGHT and 4 food sources.
+        this.world = new MyAntWorld(WORLD_WIDTH, WORLD_HEIGHT, 4, new MyDispersalPolicy());
 
         this.colony = new AntColony(ANTS, PHEROMONE_RATE, this.world);
         this.drawAnts = true;
@@ -116,6 +116,7 @@ public class Main extends Application {
                             Main.this.world.dispersePheromones();
 //                            Main.this.obstacleRenderer.dirty();
                         }
+                        //   updateHazards();
                         Main.this.lastModelUpdate = now;
                         Main.this.epochCounter++;
                     }

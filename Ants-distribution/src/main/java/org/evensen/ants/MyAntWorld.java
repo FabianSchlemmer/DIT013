@@ -1,174 +1,241 @@
 package org.evensen.ants;
 
-import static java.lang.Math.max;
-import static java.lang.Math.min;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
 
 public class MyAntWorld implements AntWorld {
     private final int width;
     private final int height;
-    private FoodSource[] foodSources;
-    private final boolean[][] food;
-    private final Position home;
-    private final float[][] foragingPheromones;
-    private final float[][] foodPheromones;
+    private float[][] foodPheromone;
+    private float[][] foragingPheromone;
+    private final boolean[][] foodMatrix;
+    private final Position homePosition;
+    private final List<FoodSource> foodSources;
+    private final DispersalPolicy dispersalPolicy;
 
-    /**
-     * @param width
-     * @param height
-     * @param foodSources
-     */
-    public MyAntWorld(final int width, final int height, int foodSources) {
-        this.width = width;
-        this.height = height;
-        this.food = new boolean[width][height];
-        this.foodSources = new FoodSource[foodSources];
-        for (int i = 0; i < foodSources; i++) {
-            placeFood(i);
+    public MyAntWorld(final int worldWidth, final int worldHeight, final int sources, final DispersalPolicy policy) {
+        this.dispersalPolicy = policy;
+        this.width = worldWidth;
+        this.height = worldHeight;
+        this.foodMatrix = new boolean[worldWidth][worldHeight];
+        this.foragingPheromone = new float[worldWidth][worldHeight];
+        this.foodPheromone = new float[worldWidth][worldHeight];
+        this.homePosition = new Position(worldWidth, worldHeight / 2);
+        this.foodSources = new ArrayList<>();
+        for (int i = 0; i < sources; i++) {
+            placeFoodSource();
         }
-        this.home = new Position(width, height/2);
-        this.foragingPheromones = new float[width][height];
-        this.foodPheromones = new float[width][height];
-    }
-    @Override
-    public int getWidth() {
-        return this.width;
+        for (FoodSource foodSource : this.foodSources){
+            updateFoodMatrix(foodSource.getPosition(), true);
+        }
     }
 
-    @Override
-    public int getHeight() {
-        return this.height;
-    }
-
-    @Override
-    public boolean isObstacle(final Position p) {
-        return !p.isInBounds(this.width, this.height);
-    }
-
-    @Override
-    public void dropForagingPheromone(final Position p, final float amount) {
-        if (p.isInBounds(this.width, this.height)) this.foragingPheromones[(int) p.getX()][(int) p.getY()] += amount;
-
-    }
-
-    @Override
-    public void dropFoodPheromone(final Position p, final float amount) {
-        if (p.isInBounds(this.width, this.height)) this.foodPheromones[(int) p.getX()][(int) p.getY()] += amount;
-    }
-
-    @Override
-    public void dropFood(final Position p) {
-
-    }
-
-    @Override
-    public void pickUpFood(final Position p) {
-        if (containsFood(p)) {
-            for (int i = 0; i < this.foodSources.length; i++) {
-                final FoodSource foodSource = this.foodSources[i];
-                final Position pos = foodSource.getPos();
-                // find the foodsource whose radius we are in, then take from it
-                if (p.isWithinRadius(pos, FoodSource.RADIUS)) {
-                    foodSource.takeFood();
-                    // replace the foodsource if it's empty
-                    if (!foodSource.containsFood()) {
-                        removeFood(i);
-                        placeFood(i);
+    private void updateFoodMatrix(Position p, boolean c){
+        if (p.isInBounds(this.width, this.height)){
+            int radius = FoodSource.getRadius();
+            int x = (int) p.getX();
+            int y = (int) p.getY();
+            for (int a = Math.max(0, x - radius); a <= Math.min(this.width - 1, x + radius); a++) {
+                for (int b = Math.max(0, y - radius); b <= Math.min(this.height - 1, y + radius); b++) {
+                    Position ab = new Position(a,b);
+                    if (ab.isWithinRadius(p, radius)) {
+                        this.foodMatrix[a][b] = c;
                     }
-                    return;
                 }
             }
         }
     }
 
-    // requires an index into the foodSources array to remove the food
-    private void removeFood(final int index) {
-        final FoodSource oldFood = this.foodSources[index];
-        this.foodSources[index] = null;
-        final Position oldPos = oldFood.getPos();
-        updateCellsInRadius(oldPos);
-    }
-
-    // requires an index into the foodSources array to place the food
-    private void placeFood(final int index) {
-        final int x = (int) (Math.random() * (this.width - 1));
-        final int y = (int) (Math.random() * (this.height - 1));
-        final Position p = new Position (x, y);
-        final FoodSource newFood = new FoodSource(p);
-        this.foodSources[index] = newFood;
-        // todo: should have separate functionality that does not loop through all foodsources and checks their radius
-        // todo: to update the matrix, as this check is not required for >placing< food (updateCellsInRadius does this)
-        updateCellsInRadius(p);
-    }
-
-    private void updateCellsInRadius(Position p) {
-        final int x = (int) p.getX();
-        final int y = (int) p.getY();
-        // restrict the cells to update by foodsource radius and world dimensions
-        final int min_x = min (x + FoodSource.RADIUS, this.width - 1);
-        final int min_y = min (y + FoodSource.RADIUS, this.height - 1);
-        for (int i = max (x - FoodSource.RADIUS, 0); i <= min_x; i++) {
-            for (int j = max (y - FoodSource.RADIUS, 0); j <= min_y; j++) {
-                final Position matrixIndex = new Position(i, j);
-                // update the cell based on the existence of foodsources within radius
-                this.food[i][j] = isFoodOnCell(matrixIndex);
-            }
-        }
-    }
-
-    // used in update function. mostly for making sure overlapping foodsources don't suffer from one of them running out
-    private boolean isFoodOnCell(Position cell) {
-        for (final FoodSource foodSource : this.foodSources) {
-            if (foodSource != null) {
-                if (cell.isWithinRadius(foodSource.getPos(), foodSource.RADIUS)) {
+    @Override
+    public boolean containsFood(Position p){
+        if (p.isInBounds(this.width, this.height)){
+            if (this.foodMatrix[(int) p.getX()][(int) p.getY()]){
+                FoodSource foodSource = findFoodSource(p);
+                if (foodSource != null){
                     return true;
                 }
             }
-        } return false;
-    }
-
-    @Override
-    public float getDeadAntCount(final Position p) {
-        return 0;
-    }
-
-    @Override
-    public float getForagingStrength(final Position p) {
-        if (p.isInBounds(this.width, this.height)) return this.foragingPheromones[(int) p.getX()][(int) p.getY()];
-        return 0.0f;
-    }
-
-    @Override
-    public float getFoodStrength(final Position p) {
-        if (p.isInBounds(this.width, this.height)) return this.foodPheromones[(int) p.getX()][(int) p.getY()];
-        return 0.0f;
-    }
-
-    @Override
-    public boolean containsFood(final Position p) {
-        if (!p.isInBounds(this.width, this.height)) {
-            return false;
         }
-        return this.food[(int) p.getX()][(int) p.getY()];
+        return false;
+    }
+    @Override
+    public void pickUpFood(Position p) {
+        FoodSource foodSource = findFoodSource(p);
+        if (foodSource != null && !foodSource.takeFood()) {
+            this.foodSources.remove(foodSource);
+            updateFoodMatrix(foodSource.getPosition(), false);
+            placeFoodSource();
+        }
+    }
+    private FoodSource findFoodSource(Position p2) {
+        int radius = FoodSource.getRadius();
+        for (FoodSource foodSource : this.foodSources) {
+            if (foodSource != null && p2.isWithinRadius(foodSource.getPosition(), radius)) {
+                return foodSource;
+            }
+        }
+        return null;
+    }
+    private void placeFoodSource() {
+        Random random = new Random();
+        int diff = FoodSource.getRadius();
+        int x = random.nextInt(diff, this.width - diff);
+        int y = random.nextInt(diff, this.height - diff);
+        while (avoidTwoAtOnePoint(x, y, diff)){
+            x = random.nextInt(diff, this.width - diff);
+            y = random.nextInt(diff, this.height - diff);
+        }
+        Position foodPosition = new Position(x, y);
+        FoodSource foodSource = new FoodSource(foodPosition);
+        this.foodSources.add(foodSource);
+        updateFoodMatrix(foodSource.getPosition(), true);
+    }
+
+    private boolean avoidTwoAtOnePoint(int x, int y, int diff){
+        for (int xdiff = -diff; xdiff <= diff; xdiff++){
+            for (int ydiff = -diff; ydiff <= diff; ydiff++){
+                if (this.foodMatrix[x+xdiff][y+ydiff]){
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     @Override
-    public long getFoodCount() {
+    public int getWidth(){
+        return this.width;
+    }
+    @Override
+    public int getHeight(){
+        return this.height;
+    }
+    @Override
+    public boolean isObstacle(Position p){
+        return !p.isInBounds(this.width, this.height);
+    }
+    @Override
+    public void dropForagingPheromone(Position p, float amount){
+        if (p.isInBounds(this.width, this.height)){
+            int x = (int) p.getX();
+            int y = (int) p.getY();
+            float oldAmount = this.foragingPheromone[x][y];
+            this.foragingPheromone[x][y] = Math.min(1, oldAmount + amount);
+        }
+    }
+    @Override
+    public void dropFoodPheromone(Position p, float amount){
+        if (p.isInBounds(this.width, this.height)){
+            int x = (int) p.getX();
+            int y = (int) p.getY();
+            float oldAmount = this.foodPheromone[x][y];
+            this.foodPheromone[x][y] = Math.min(1, oldAmount + amount);
+        }
+    }
+    @Override
+    public float getForagingStrength(Position p){
+        if (p.isInBounds(this.width, this.height)){
+            return this.foragingPheromone[(int) p.getX()][(int) p.getY()];
+        }
+        return 0;
+    }
+    @Override
+    public float getFoodStrength(Position p){
+        if (p.isInBounds(this.width, this.height)){
+            return this.foodPheromone[(int) p.getX()][(int) p.getY()];
+        }
+        return 0;
+    }
+    @Override
+    public void dropFood(Position p){
+
+    }
+    @Override
+    public float getDeadAntCount(Position p){
         return 0;
     }
 
+    @Override
+    public long getFoodCount(){
+        return 0;
+    }
     @Override
     public boolean isHome(final Position p) {
-        return p.isWithinRadius(this.home, 20);
+        return p.isWithinRadius(this.homePosition, 20);
     }
-
     @Override
     public void dispersePheromones() {
+        float[][] tempFoodPhero = new float[this.width][this.height];
+        float[][] tempForagePhero = new float[this.width][this.height];
 
+        for (FoodSource foodSource : this.foodSources) {
+            dropFoodPheromone(foodSource.getPosition(), 1);
+        }
+
+        for (int x = 0; x < this.width; x++) {
+            for (int y = 0; y < this.height; y++) {
+                if (!isObstacle(new Position(x, y))) {
+                    // call dispersalPolicy on each cell
+                    float[] pheroValues = this.dispersalPolicy.getDispersedValue(this, new Position(x, y));
+                    tempFoodPhero[x][y] = pheroValues[0];
+                    tempForagePhero[x][y] = pheroValues[1];
+                }
+            }
+        }
+
+        this.foodPheromone = tempFoodPhero;
+        this.foragingPheromone = tempForagePhero;
+    }
+
+    public void selfContainedDisperse() {
+        final float K = 0.5f;
+        final float F = 0.95f;
+
+        for (FoodSource foodSource : this.foodSources) {
+            dropFoodPheromone(foodSource.getPosition(), 1);
+        }
+        float[][] tempFoodPhero = new float[this.width][this.height];
+        float[][] tempForagePhero = new float[this.width][this.height];
+
+        for (int x = 0; x < this.width; x++) {
+            for (int y = 0; y < this.height; y++) {
+                float sumFoodPhero = 0;
+                float sumForagePhero = 0;
+                if (!isObstacle(new Position(x, y))) {
+                    float foodPhero = this.foodPheromone[x][y];
+                    float foragePhero = this.foragingPheromone[x][y];
+
+                    // loop through immediate neighbours
+                    for (int i = x - 1; i <= x + 1; i++) {
+                        for (int j = y - 1; j <= y + 1; j++) {
+                            // don't evaluate own position & check for bounds
+                            if (!(i == x && j == y) && new Position (i, j).isInBounds(this.width, this.height)) {
+                                sumFoodPhero += this.foodPheromone[i][j];
+                                sumForagePhero += this.foragingPheromone[i][j];
+                            // if not in bounds (& not own position) -> we're looking at an edge position
+                            // so add own value
+                            } else if (!(i == x && j == y)) {
+                                sumFoodPhero += foodPhero;
+                                sumForagePhero += foragePhero;
+                            }
+                        }
+                    }
+                    // do the K and F calculations
+                    sumFoodPhero = ((1 - K) * sumFoodPhero) / 8 + (K * foodPhero);
+                    sumForagePhero = ((1 - K) * sumForagePhero) / 8 + (K * foragePhero);
+                }
+                tempFoodPhero[x][y] = sumFoodPhero * F;
+                tempForagePhero[x][y] = sumForagePhero * F;
+            }
+        }
+        // overwrite old pheromone matrix
+        this.foodPheromone = tempFoodPhero;
+        this.foragingPheromone = tempForagePhero;
     }
 
     @Override
     public void setObstacle(final Position p, final boolean add) {
-
     }
 
     @Override

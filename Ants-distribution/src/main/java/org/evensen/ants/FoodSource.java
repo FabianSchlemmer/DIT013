@@ -1,28 +1,31 @@
 package org.evensen.ants;
 
-import static java.lang.Math.max;
-
 public class FoodSource {
-    private final Position pos;
-    private int amount;
-    public final static int RADIUS = 3;
-    public final static int AMOUNT = 100;
+    private final Position position;
+    private static final int radius = 10;
+    private int foodAmount = 1000;
 
-    public FoodSource(Position p) {
-        this.pos = p;
-        this.amount = (int) max (Math.random() * AMOUNT, 1);
+    public FoodSource(Position position){
+        this.position = position;
     }
 
-    public boolean containsFood() {
-        return 0 < this.amount;
+
+    public Position getPosition(){
+        return this.position;
     }
 
-    public void takeFood() {
-        assert this.containsFood();
-        --this.amount;
+    public static int getRadius(){
+        return radius;
     }
 
-    public Position getPos() {
-        return this.pos;
+    public boolean takeFood() {
+        if (this.foodAmount > 1){
+            this.foodAmount--;
+            return true;
+        } else if (this.foodAmount == 1){
+            this.foodAmount--;
+            return false;
+        }
+        return false;
     }
 }
